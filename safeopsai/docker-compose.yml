@@ -1,0 +1,466 @@
+# ============================================================
+#  SafeOpsAI — Docker Compose
+#  Services: frontend | backend | database | prometheus | grafana
+# ============================================================
+
+networks:
+  safeops-net:
+    driver: bridge
+
+volumes:
+  postgres-data:
+  prometheus-data:
+  grafana-data:
+  ollama-models:
+
+services:
+
+  # ----------------------------------------------------------
+  # DATABASE — PostgreSQL
+  # ----------------------------------------------------------
+  database:
+    image: postgres:16-alpine
+    container_name: safeops-database
+    restart: unless-stopped
+    networks: [safeops-net]
+    environment:
+      POSTGRES_DB:       safeopsdb
+      POSTGRES_USER:     safeops
+      POSTGRES_PASSWORD: safeops123
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    ports:
+      # Host 5433 → container 5432 (5432 on the host is used by another project)
+      - "5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U safeops -d safeopsdb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  # ----------------------------------------------------------
+  # BACKEND — FastAPI
+  # ----------------------------------------------------------
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: safeops-backend
+    restart: unless-stopped
+    networks: [safeops-net]
+    environment:
+      DB_HOST: database
+      DB_PORT: "5432"
+      DB_NAME: safeopsdb
+      DB_USER: safeops
+      DB_PASS: safeops123
+    ports:
+      - "8000:8000"
+    depends_on:
+      database:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    labels:
+      # Prometheus will scrape this container via the label-based SD config
+      prometheus.scrape: "true"
+      prometheus.port:   "8000"
+      prometheus.path:   "/metrics"
+
+  # ----------------------------------------------------------
+  # FRONTEND — Nginx serving static HTML + Chart.js
+  # ----------------------------------------------------------
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: safeops-frontend
+    restart: unless-stopped
+    networks: [safeops-net]
+    ports:
+      - "3000:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # ----------------------------------------------------------
+  # PROMETHEUS — Metrics collection
+  # ----------------------------------------------------------
+  prometheus:
+    image: prom/prometheus:v2.52.0
+    container_name: safeops-prometheus
+    restart: unless-stopped
+    networks: [safeops-net]
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/alert_rules.yml:/etc/prometheus/alert_rules.yml:ro
+      - prometheus-data:/prometheus
+    ports:
+      - "9090:9090"
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=7d"
+      - "--web.enable-lifecycle"
+
+  # ----------------------------------------------------------
+  # GRAFANA — Dashboards
+  # ----------------------------------------------------------
+  grafana:
+    image: grafana/grafana:10.4.2
+    container_name: safeops-grafana
+    restart: unless-stopped
+    networks: [safeops-net]
+    environment:
+      GF_SECURITY_ADMIN_USER:     admin
+      GF_SECURITY_ADMIN_PASSWORD: safeops123
+      GF_USERS_ALLOW_SIGN_UP:     "false"
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/safeops.json
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports:
+      - "3001:3000"
+    depends_on:
+      - prometheus
+
+  # ----------------------------------------------------------
+  # POSTGRES EXPORTER — Exposes DB metrics to Prometheus
+  # ----------------------------------------------------------
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:v0.15.0
+    container_name: safeops-postgres-exporter
+    restart: unless-stopped
+    networks: [safeops-net]
+    environment:
+      DATA_SOURCE_NAME: "postgresql://safeops:safeops123@database:5432/safeopsdb?sslmode=disable"
+    ports:
+      - "9187:9187"
+    depends_on:
+      database:
+        condition: service_healthy
+
+  # ----------------------------------------------------------
+  # INCIDENT AGENT — Step 3
+  # Polls Prometheus every 5s, detects anomalies, writes to PostgreSQL.
+  # API: http://localhost:8001/health  /status  /incidents  /metrics
+  # ----------------------------------------------------------
+  incident-agent:
+    build:
+      context: ./incident-agent
+      dockerfile: Dockerfile
+    container_name: safeops-incident-agent
+    restart: unless-stopped
+    networks: [safeops-net]
+    environment:
+      PROMETHEUS_URL: http://prometheus:9090
+      DB_HOST:        database
+      DB_PORT:        "5432"
+      DB_NAME:        safeopsdb
+      DB_USER:        safeops
+      DB_PASS:        safeops123
+      API_PORT:       "8001"
+      LOG_LEVEL:      INFO
+    volumes:
+      # Mount the migration SQL so the agent can apply it on startup
+      - ./database/migrate_step3.sql:/app/database/migrate_step3.sql:ro
+      # Allow rules.yml to be edited without rebuilding the image
+      - ./incident-agent/incident_agent/rules.yml:/app/incident_agent/rules.yml:ro
+      # Service topology for Root Cause Agent context
+      - ./incident-agent/incident_agent/topology.yml:/app/incident_agent/topology.yml:ro
+    ports:
+      - "8001:8001"
+    depends_on:
+      database:
+        condition: service_healthy
+      prometheus:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 4
+      start_period: 45s
+
+  # ----------------------------------------------------------
+  # OLLAMA — Local LLM runtime for the Root Cause Agent (Step 4)
+  #
+  # Pull the default model once, then restart the RCA to pick it up:
+  #   docker exec safeops-ollama ollama pull llama3.2
+  #   docker compose restart root-cause-agent
+  # ----------------------------------------------------------
+  ollama:
+    image: ollama/ollama:latest
+    container_name: safeops-ollama
+    restart: unless-stopped
+    networks: [safeops-net]
+    volumes:
+      - ollama-models:/root/.ollama
+    ports:
+      - "11434:11434"
+
+  # ----------------------------------------------------------
+  # ROOT CAUSE AGENT — Step 4
+  # Polls the rca_queue view, diagnoses open incidents via Ollama,
+  # stores root-cause decisions in agent_decisions (with confidence
+  # for the calibration analysis). Falls back to rule-based diagnosis
+  # if Ollama is unavailable or returns invalid JSON.
+  # API: http://localhost:8002/health  /status  /diagnoses  /diagnose/{id}
+  # ----------------------------------------------------------
+  root-cause-agent:
+    build:
+      context: ./root-cause-agent
+      dockerfile: Dockerfile
+    container_name: safeops-root-cause-agent
+    restart: unless-stopped
+    networks: [safeops-net]
+    environment:
+      OLLAMA_URL:     http://ollama:11434
+      OLLAMA_MODEL:   llama3.2
+      PROMETHEUS_URL: http://prometheus:9090
+      DB_HOST:        database
+      DB_PORT:        "5432"
+      DB_NAME:        safeopsdb
+      DB_USER:        safeops
+      DB_PASS:        safeops123
+      API_PORT:       "8002"
+      LOG_LEVEL:      INFO
+    volumes:
+      # Mount the Step 4 migration so the agent can apply it on startup
+      - ./database/migrate_step4.sql:/app/database/migrate_step4.sql:ro
+      # Allow config.yml to be edited without rebuilding the image
+      - ./root-cause-agent/root_cause_agent/config.yml:/app/root_cause_agent/config.yml:ro
+      # Service topology (shared with the incident-agent) for cascade hints
+      - ./incident-agent/incident_agent/topology.yml:/app/root_cause_agent/topology.yml:ro
+    ports:
+      - "8002:8002"
+    depends_on:
+      database:
+        condition: service_healthy
+      prometheus:
+        condition: service_started
+      ollama:
+        condition: service_started
+      incident-agent:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8002/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 4
+      start_period: 45s
+
+  # ----------------------------------------------------------
+  # SCORING AGENT — Step 5
+  # Deterministic, rule-based Cost / Reliability / Security scorers.
+  # Consumes the RCA's remediation candidates, scores each 0–10, and
+  # logs every score to agent_decisions for the coordinator + evaluation.
+  # API: http://localhost:8003/health  /status  /scores  /scores/{id}
+  # ----------------------------------------------------------
+  scoring-agent:
+    build:
+      context: ./scoring-agent
+      dockerfile: Dockerfile
+    container_name: safeops-scoring-agent
+    restart: unless-stopped
+    networks: [safeops-net]
+    environment:
+      DB_HOST:    database
+      DB_PORT:    "5432"
+      DB_NAME:    safeopsdb
+      DB_USER:    safeops
+      DB_PASS:    safeops123
+      API_PORT:   "8003"
+      LOG_LEVEL:  INFO
+    volumes:
+      # Mount the Step 5 migration so the agent can apply it on startup
+      - ./database/migrate_step5.sql:/app/database/migrate_step5.sql:ro
+      # Allow config.yml to be edited without rebuilding the image
+      - ./scoring-agent/scoring_agent/config.yml:/app/scoring_agent/config.yml:ro
+    ports:
+      - "8003:8003"
+    depends_on:
+      database:
+        condition: service_healthy
+      root-cause-agent:
+        condition: service_started
+      incident-agent:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8003/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 4
+      start_period: 45s
+
+  # ----------------------------------------------------------
+  # COORDINATOR AGENT — Step 6
+  # Deterministic MCDM (weighted-sum default, TOPSIS behind a flag).
+  # Reads the cost/reliability/security scores, ranks candidates, picks the
+  # winner. Weights are swappable at runtime via POST /weights on :8004.
+  # API: http://localhost:8004/health  /status  /weights  /decisions  /simulate
+  # ----------------------------------------------------------
+  coordinator-agent:
+    build:
+      context: ./coordinator-agent
+      dockerfile: Dockerfile
+    container_name: safeops-coordinator-agent
+    restart: unless-stopped
+    networks: [safeops-net]
+    environment:
+      DB_HOST:    database
+      DB_PORT:    "5432"
+      DB_NAME:    safeopsdb
+      DB_USER:    safeops
+      DB_PASS:    safeops123
+      API_PORT:   "8004"
+      LOG_LEVEL:  INFO
+    volumes:
+      # Mount the Step 6 migration so the agent can apply it on startup
+      - ./database/migrate_step6.sql:/app/database/migrate_step6.sql:ro
+      # Allow config.yml to be edited without rebuilding the image
+      - ./coordinator-agent/coordinator_agent/config.yml:/app/coordinator_agent/config.yml:ro
+    ports:
+      - "8004:8004"
+    depends_on:
+      database:
+        condition: service_healthy
+      scoring-agent:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8004/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 4
+      start_period: 45s
+
+  # ----------------------------------------------------------
+  # SANDBOX VALIDATION AGENT — Phase 5
+  # Multi-signal Sandbox Validation Engine & Adaptive Candidate Fallback.
+  # Validates MCDM-ranked remediation candidates in an isolated sandbox.
+  # API: http://localhost:8005/health  /status  /sandbox/validate  /incidents/{id}/validations
+  # ----------------------------------------------------------
+  sandbox-agent:
+    build:
+      context: ./sandbox-agent
+      dockerfile: Dockerfile
+    container_name: safeops-sandbox-agent
+    restart: unless-stopped
+    networks: [safeops-net]
+    environment:
+      DB_HOST:        database
+      DB_PORT:        "5432"
+      DB_NAME:        safeopsdb
+      DB_USER:        safeops
+      DB_PASS:        safeops123
+      API_PORT:       "8005"
+      PROMETHEUS_URL: http://prometheus:9090
+      BACKEND_URL:    http://backend:8000
+      LOG_LEVEL:      INFO
+    volumes:
+      # Mount the Step 7 migration so the agent can apply it on startup
+      - ./database/migrate_step7.sql:/app/database/migrate_step7.sql:ro
+      # Allow config.yml to be edited without rebuilding the image
+      - ./sandbox-agent/sandbox_agent/config.yml:/app/sandbox_agent/config.yml:ro
+    ports:
+      - "8005:8005"
+    depends_on:
+      database:
+        condition: service_healthy
+      coordinator-agent:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8005/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 4
+      start_period: 45s
+
+  # ----------------------------------------------------------
+  # AUTONOMOUS REMEDIATION & ROLLBACK AGENT — Phase 6
+  # Production execution, continuous monitoring, recovery scoring, and automatic rollback.
+  # API: http://localhost:8006/health  /status  /remediation/execute  /remediation/{id}  /incidents/{id}/remediation
+  # ----------------------------------------------------------
+  remediation-agent:
+    build:
+      context: ./remediation-agent
+      dockerfile: Dockerfile
+    container_name: safeops-remediation-agent
+    restart: unless-stopped
+    networks: [safeops-net]
+    environment:
+      DB_HOST:        database
+      DB_PORT:        "5432"
+      DB_NAME:        safeopsdb
+      DB_USER:        safeops
+      DB_PASS:        safeops123
+      API_PORT:       "8006"
+      PROMETHEUS_URL: http://prometheus:9090
+      BACKEND_URL:    http://backend:8000
+      LOG_LEVEL:      INFO
+    volumes:
+      # Mount the Step 8 migration so the agent can apply it on startup
+      - ./database/migrate_step8.sql:/app/database/migrate_step8.sql:ro
+      # Allow config.yml to be edited without rebuilding the image
+      - ./remediation-agent/remediation_agent/config.yml:/app/remediation_agent/config.yml:ro
+    ports:
+      - "8006:8006"
+    depends_on:
+      database:
+        condition: service_healthy
+      sandbox-agent:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8006/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 4
+      start_period: 45s
+
+  # ----------------------------------------------------------
+  # FAULT INJECTOR — Step 2 (profile-gated: only starts when
+
+  # explicitly requested, never as part of normal `compose up`)
+  #
+  # Run a one-off scenario:
+  #   docker compose --profile fault run --rm fault-injector scenario slow-db
+  #
+  # Run an interactive shell:
+  #   docker compose --profile fault run --rm fault-injector bash
+  #
+  # The Docker socket is bind-mounted so the injector can stop/start
+  # sibling containers (backend-down, cpu-stress, db-down, bad-db-config).
+  # ----------------------------------------------------------
+  fault-injector:
+    build:
+      context: ./fault-injection
+      dockerfile: Dockerfile
+    container_name: safeops-fault-injector
+    profiles: [fault]
+    networks: [safeops-net]
+    environment:
+      # Point at the in-network service names, not localhost
+      SAFEOPS_BACKEND_URL:    http://backend:8000
+      SAFEOPS_PROMETHEUS_URL: http://prometheus:9090
+      SAFEOPS_EVENT_LOG:      /app/logs/fault_events.jsonl
+    volumes:
+      # Docker socket — required for container stop/start/exec operations
+      - /var/run/docker.sock:/var/run/docker.sock
+      # Persist the JSONL event log between runs
+      - ./fault-injection/logs:/app/logs
+    depends_on:
+      backend:
+        condition: service_healthy

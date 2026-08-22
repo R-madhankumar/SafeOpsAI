@@ -1,0 +1,18 @@
+# SafeOpsAI — Scoring Agent Configuration
+# All values here are defaults; environment variables override everything.
+# Edit this file and restart the container — no rebuild needed.
+
+agent:
+  # How often to poll the scoring_queue for newly-diagnosed incidents (seconds)
+  poll_interval_seconds: 5
+
+  # Maximum number of incidents to score in one polling cycle
+  max_concurrent_incidents: 10
+
+# Candidate-set policy: the scoring agent always merges the RCA's LLM-proposed
+# candidates with the canonical action universe (per root-cause service) so the
+# coordinator has a comparable, non-empty set to rank. RCA candidates are
+# flagged proposed_by_rca=True in the evidence.
+candidates:
+  min_candidates: 3
+  max_candidates: 6

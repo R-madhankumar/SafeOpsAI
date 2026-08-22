@@ -1,0 +1,80 @@
+{
+  "title": "SafeOpsAI — Service Health",
+  "uid": "safeopsai-main",
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "10s",
+  "time": { "from": "now-15m", "to": "now" },
+  "panels": [
+    {
+      "id": 1, "type": "stat", "title": "Request Rate (req/s)",
+      "gridPos": { "x": 0, "y": 0, "w": 4, "h": 4 },
+      "targets": [{
+        "expr": "sum(rate(http_requests_total[1m]))",
+        "legendFormat": "req/s"
+      }],
+      "datasource": "Prometheus"
+    },
+    {
+      "id": 2, "type": "stat", "title": "Error Rate (/s)",
+      "gridPos": { "x": 4, "y": 0, "w": 4, "h": 4 },
+      "targets": [{
+        "expr": "sum(rate(application_errors_total[1m]))",
+        "legendFormat": "err/s"
+      }],
+      "datasource": "Prometheus",
+      "fieldConfig": { "defaults": { "thresholds": {
+        "steps": [
+          { "color": "green", "value": null },
+          { "color": "yellow", "value": 0.1 },
+          { "color": "red",    "value": 0.5 }
+        ]
+      }}}
+    },
+    {
+      "id": 3, "type": "stat", "title": "P95 Latency (s)",
+      "gridPos": { "x": 8, "y": 0, "w": 4, "h": 4 },
+      "targets": [{
+        "expr": "histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[2m]))",
+        "legendFormat": "p95"
+      }],
+      "datasource": "Prometheus"
+    },
+    {
+      "id": 4, "type": "stat", "title": "Backend Up",
+      "gridPos": { "x": 12, "y": 0, "w": 4, "h": 4 },
+      "targets": [{ "expr": "up{job='safeops-backend'}", "legendFormat": "up" }],
+      "datasource": "Prometheus",
+      "fieldConfig": { "defaults": { "mappings": [
+        { "type": "value", "options": { "0": { "text": "DOWN", "color": "red" }, "1": { "text": "UP", "color": "green" } } }
+      ]}}
+    },
+    {
+      "id": 5, "type": "timeseries", "title": "HTTP Request Rate by Status",
+      "gridPos": { "x": 0, "y": 4, "w": 12, "h": 8 },
+      "targets": [{
+        "expr": "sum by (status_code) (rate(http_requests_total[1m]))",
+        "legendFormat": "{{status_code}}"
+      }],
+      "datasource": "Prometheus"
+    },
+    {
+      "id": 6, "type": "timeseries", "title": "DB Query Latency (p95)",
+      "gridPos": { "x": 12, "y": 4, "w": 12, "h": 8 },
+      "targets": [{
+        "expr": "histogram_quantile(0.95, rate(db_query_duration_seconds_bucket[2m]))",
+        "legendFormat": "p95 DB latency"
+      }],
+      "datasource": "Prometheus"
+    },
+    {
+      "id": 7, "type": "timeseries", "title": "Application Errors by Type",
+      "gridPos": { "x": 0, "y": 12, "w": 24, "h": 7 },
+      "targets": [{
+        "expr": "sum by (error_type) (rate(application_errors_total[1m]))",
+        "legendFormat": "{{error_type}}"
+      }],
+      "datasource": "Prometheus"
+    }
+  ]
+}

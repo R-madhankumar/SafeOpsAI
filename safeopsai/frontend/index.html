@@ -1,0 +1,1161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SafeOpsAI — Autonomous Operations Control Center</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    :root {
+      --bg-dark: #0b0d14;
+      --card-bg: #161927;
+      --card-border: #25293d;
+      --accent-primary: #6366f1;
+      --accent-success: #10b981;
+      --accent-warning: #f59e0b;
+      --accent-error: #ef4444;
+      --text-muted: #64748b;
+      --text-light: #e2e8f0;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: var(--bg-dark);
+      color: var(--text-light);
+      min-height: 100vh;
+      line-height: 1.5;
+    }
+
+    /* Header */
+    header {
+      background: #111422;
+      border-bottom: 1px solid var(--card-border);
+      padding: 1rem 2rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 1rem;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .brand-title {
+      font-size: 1.25rem;
+      font-weight: 700;
+      color: var(--accent-primary);
+      letter-spacing: -0.02em;
+    }
+
+    .brand-subtitle {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+    }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+
+    .sys-badge {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.35rem 0.85rem;
+      border-radius: 20px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      background: rgba(16, 185, 129, 0.1);
+      color: var(--accent-success);
+      border: 1px solid rgba(16, 185, 129, 0.2);
+    }
+
+    .sys-badge.degraded {
+      background: rgba(245, 158, 11, 0.1);
+      color: var(--accent-warning);
+      border-color: rgba(245, 158, 11, 0.2);
+    }
+
+    .status-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--accent-success);
+      box-shadow: 0 0 8px var(--accent-success);
+      animation: pulse 2s infinite;
+    }
+    .status-dot.degraded { background: var(--accent-warning); box-shadow: 0 0 8px var(--accent-warning); }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+    .btn-mode {
+      padding: 0.4rem 0.85rem;
+      border-radius: 6px;
+      border: 1px solid var(--card-border);
+      background: var(--card-bg);
+      color: var(--text-light);
+      cursor: pointer;
+      font-size: 0.8rem;
+      font-weight: 600;
+      transition: all 0.2s;
+    }
+    .btn-mode:hover { border-color: var(--accent-primary); color: var(--accent-primary); }
+    .btn-mode.active-demo { background: rgba(245, 158, 11, 0.15); border-color: var(--accent-warning); color: var(--accent-warning); }
+
+    /* Layout */
+    main {
+      padding: 1.5rem 2rem;
+      max-width: 1600px;
+      margin: 0 auto;
+    }
+
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 8px;
+      padding: 1.25rem;
+    }
+
+    .card-label {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-muted);
+      margin-bottom: 0.4rem;
+    }
+
+    .card-value {
+      font-size: 1.8rem;
+      font-weight: 700;
+      color: var(--accent-primary);
+    }
+
+    .card-unit {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      margin-top: 0.2rem;
+    }
+
+    /* Live Incident Pipeline Bar */
+    .pipeline-panel {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 8px;
+      padding: 1.25rem 1.5rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .panel-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1rem;
+    }
+
+    .panel-title {
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: var(--text-light);
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .pipeline-tracker {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.5rem;
+      overflow-x: auto;
+      padding: 0.5rem 0;
+    }
+
+    .pipeline-stage {
+      flex: 1;
+      min-width: 110px;
+      text-align: center;
+      padding: 0.6rem 0.5rem;
+      background: var(--bg-dark);
+      border: 1px solid var(--card-border);
+      border-radius: 6px;
+      position: relative;
+      transition: all 0.3s;
+    }
+
+    .pipeline-stage .stage-num {
+      font-size: 0.65rem;
+      font-weight: 700;
+      color: var(--text-muted);
+      margin-bottom: 0.2rem;
+    }
+
+    .pipeline-stage .stage-name {
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: var(--text-muted);
+    }
+
+    .pipeline-stage.active {
+      border-color: var(--accent-primary);
+      background: rgba(99, 102, 241, 0.1);
+      box-shadow: 0 0 12px rgba(99, 102, 241, 0.2);
+    }
+    .pipeline-stage.active .stage-name { color: var(--accent-primary); }
+    .pipeline-stage.active .stage-num { color: var(--accent-primary); }
+
+    .pipeline-stage.passed {
+      border-color: var(--accent-success);
+      background: rgba(16, 185, 129, 0.05);
+    }
+    .pipeline-stage.passed .stage-name { color: var(--accent-success); }
+
+    .pipeline-arrow {
+      color: var(--text-muted);
+      font-size: 0.8rem;
+    }
+
+    /* Fault Injection Panel */
+    .fault-panel {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 8px;
+      padding: 1.25rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .fault-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 0.75rem;
+      margin-top: 0.75rem;
+    }
+
+    .fault-btn {
+      padding: 0.6rem 1rem;
+      border-radius: 6px;
+      border: 1px solid var(--card-border);
+      background: var(--bg-dark);
+      color: var(--text-light);
+      cursor: pointer;
+      font-size: 0.85rem;
+      font-weight: 500;
+      transition: all 0.2s;
+    }
+    .fault-btn:hover { border-color: var(--accent-primary); color: var(--accent-primary); }
+    .fault-btn.active { background: rgba(239, 68, 68, 0.15); border-color: var(--accent-error); color: var(--accent-error); }
+    .fault-btn.reset { background: rgba(16, 185, 129, 0.15); border-color: var(--accent-success); color: var(--accent-success); }
+
+    /* Two Column Content */
+    .two-col {
+      display: grid;
+      grid-template-columns: 1fr 2fr;
+      gap: 1.5rem;
+      margin-bottom: 1.5rem;
+    }
+
+    @media (max-width: 1024px) {
+      .two-col { grid-template-columns: 1fr; }
+    }
+
+    /* Incidents List Panel */
+    .incident-item {
+      background: var(--bg-dark);
+      border: 1px solid var(--card-border);
+      border-radius: 6px;
+      padding: 0.85rem 1rem;
+      margin-bottom: 0.75rem;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .incident-item:hover { border-color: var(--accent-primary); }
+    .incident-item.selected { border-color: var(--accent-primary); background: rgba(99, 102, 241, 0.08); }
+
+    .inc-meta {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 0.4rem;
+    }
+
+    .inc-id { font-weight: 700; font-size: 0.85rem; color: var(--accent-primary); }
+    .inc-title { font-weight: 600; font-size: 0.9rem; margin-bottom: 0.3rem; }
+    .inc-sub { font-size: 0.75rem; color: var(--text-muted); }
+
+    .tag {
+      padding: 0.15rem 0.5rem;
+      border-radius: 4px;
+      font-size: 0.7rem;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+    .tag-open { background: rgba(245, 158, 11, 0.15); color: var(--accent-warning); }
+    .tag-resolved { background: rgba(16, 185, 129, 0.15); color: var(--accent-success); }
+    .tag-escalated { background: rgba(239, 68, 68, 0.15); color: var(--accent-error); }
+
+    /* Pipeline Detail Sections */
+    .pipeline-detail-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+      margin-bottom: 1rem;
+    }
+    @media (max-width: 768px) { .pipeline-detail-grid { grid-template-columns: 1fr; } }
+
+    .section-card {
+      background: var(--bg-dark);
+      border: 1px solid var(--card-border);
+      border-radius: 6px;
+      padding: 1rem;
+    }
+    .section-card h4 { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); margin-bottom: 0.75rem; }
+
+    /* Multi-Agent Negotiation View */
+    .agent-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 0.75rem;
+      margin-bottom: 1rem;
+    }
+    @media (max-width: 768px) { .agent-grid { grid-template-columns: 1fr; } }
+
+    .agent-card {
+      background: var(--bg-dark);
+      border: 1px solid var(--card-border);
+      border-radius: 6px;
+      padding: 0.85rem;
+    }
+    .agent-card .name { font-size: 0.75rem; font-weight: 700; text-transform: uppercase; color: var(--accent-primary); margin-bottom: 0.3rem; }
+    .agent-card .score { font-size: 1.4rem; font-weight: 700; color: var(--text-light); }
+    .agent-card .reason { font-size: 0.75rem; color: var(--text-muted); margin-top: 0.4rem; }
+
+    /* Meter Bar */
+    .meter-bar {
+      height: 6px;
+      background: var(--card-border);
+      border-radius: 3px;
+      overflow: hidden;
+      margin-top: 0.4rem;
+    }
+    .meter-fill { height: 100%; background: var(--accent-primary); border-radius: 3px; }
+
+    /* MCDM Table */
+    table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+    th { text-align: left; color: var(--text-muted); font-weight: 500; padding: 0.4rem 0.5rem; border-bottom: 1px solid var(--card-border); }
+    td { padding: 0.45rem 0.5rem; border-bottom: 1px solid #1c2033; }
+    tr.winner td { background: rgba(99, 102, 241, 0.12); font-weight: 600; color: var(--accent-primary); }
+
+    /* Timeline */
+    .timeline-list { list-style: none; padding-left: 0.5rem; }
+    .timeline-item {
+      position: relative;
+      padding-left: 1.25rem;
+      padding-bottom: 0.75rem;
+      border-left: 2px solid var(--card-border);
+    }
+    .timeline-item:last-child { border-left-color: transparent; }
+    .timeline-item::before {
+      content: '';
+      position: absolute;
+      left: -5px; top: 3px;
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--accent-primary);
+    }
+    .timeline-item.success::before { background: var(--accent-success); }
+    .timeline-item.rollback::before { background: var(--accent-error); }
+    .timeline-time { font-size: 0.7rem; color: var(--text-muted); }
+    .timeline-msg { font-size: 0.8rem; font-weight: 500; color: var(--text-light); }
+
+    /* Topology Map */
+    .topology-container {
+      display: flex;
+      align-items: center;
+      justify-content: space-around;
+      gap: 1rem;
+      padding: 1rem 0;
+      flex-wrap: wrap;
+    }
+    .topo-node {
+      background: var(--bg-dark);
+      border: 1px solid var(--card-border);
+      border-radius: 8px;
+      padding: 0.85rem 1.25rem;
+      text-align: center;
+      min-width: 130px;
+    }
+    .topo-node.healthy { border-color: var(--accent-success); }
+    .topo-node.degraded { border-color: var(--accent-warning); }
+    .topo-node.down { border-color: var(--accent-error); }
+    .topo-node .node-name { font-weight: 700; font-size: 0.85rem; }
+    .topo-node .node-type { font-size: 0.7rem; color: var(--text-muted); }
+
+    /* Modal */
+    .modal-backdrop {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.75);
+      z-index: 1000;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem;
+    }
+    .modal-backdrop.show { display: flex; }
+    .modal-content {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 10px;
+      width: 100%;
+      max-width: 900px;
+      max-height: 85vh;
+      overflow-y: auto;
+      padding: 1.5rem;
+    }
+
+    .demo-badge {
+      display: inline-block;
+      padding: 0.15rem 0.5rem;
+      background: rgba(245, 158, 11, 0.2);
+      color: var(--accent-warning);
+      border: 1px solid var(--accent-warning);
+      border-radius: 4px;
+      font-size: 0.65rem;
+      font-weight: 700;
+      margin-left: 0.5rem;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <div class="status-dot" id="header-status-dot"></div>
+    <div>
+      <div class="brand-title">SafeOpsAI Control Center</div>
+      <div class="brand-subtitle">Real-time Autonomous Operations &amp; Risk-Aware Remediation Engine</div>
+    </div>
+  </div>
+  <div class="header-actions">
+    <div class="sys-badge" id="sys-status-badge">
+      SYSTEM STATUS: <span id="sys-status-text">OPERATIONAL</span>
+    </div>
+    <button class="btn-mode" id="btn-demo-mode" onclick="toggleDemoMode()">
+      DEMO MODE: OFF
+    </button>
+  </div>
+</header>
+
+<main>
+
+  <!-- Top KPI Bar -->
+  <div class="kpi-grid">
+    <div class="card">
+      <div class="card-label">Active Incidents</div>
+      <div class="card-value" id="kpi-active-incidents">0</div>
+      <div class="card-unit">requiring attention</div>
+    </div>
+    <div class="card">
+      <div class="card-label">Services Status</div>
+      <div class="card-value" id="kpi-services-status">4/4</div>
+      <div class="card-unit">operational nodes</div>
+    </div>
+    <div class="card">
+      <div class="card-label">Remediations Executed</div>
+      <div class="card-value" id="kpi-remediations">0</div>
+      <div class="card-unit" id="kpi-success-rate">100% success rate</div>
+    </div>
+    <div class="card">
+      <div class="card-label">Mean MTTR</div>
+      <div class="card-value" id="kpi-mttr">0.0s</div>
+      <div class="card-unit">recovery latency</div>
+    </div>
+  </div>
+
+  <!-- Live 7-Stage Pipeline Tracker -->
+  <div class="pipeline-panel">
+    <div class="panel-header">
+      <div class="panel-title">⚡ Live Incident Pipeline Lifecycle <span id="demo-indicator" style="display:none" class="demo-badge">DEMO MODE ACTIVE</span></div>
+      <div style="font-size:0.75rem; color:var(--text-muted);" id="pipeline-incident-id">Select an incident to view live stage</div>
+    </div>
+    <div class="pipeline-tracker">
+      <div class="pipeline-stage" id="stage-INCIDENT">
+        <div class="stage-num">STAGE 1</div>
+        <div class="stage-name">INCIDENT</div>
+      </div>
+      <div class="pipeline-arrow">➔</div>
+      <div class="pipeline-stage" id="stage-ROOT_CAUSE">
+        <div class="stage-num">STAGE 2</div>
+        <div class="stage-name">ROOT CAUSE</div>
+      </div>
+      <div class="pipeline-arrow">➔</div>
+      <div class="pipeline-stage" id="stage-NEGOTIATION">
+        <div class="stage-num">STAGE 3</div>
+        <div class="stage-name">AGENT SCORING</div>
+      </div>
+      <div class="pipeline-arrow">➔</div>
+      <div class="pipeline-stage" id="stage-MCDM">
+        <div class="stage-num">STAGE 4</div>
+        <div class="stage-name">MCDM RANKING</div>
+      </div>
+      <div class="pipeline-arrow">➔</div>
+      <div class="pipeline-stage" id="stage-SANDBOX">
+        <div class="stage-num">STAGE 5</div>
+        <div class="stage-name">SANDBOX</div>
+      </div>
+      <div class="pipeline-arrow">➔</div>
+      <div class="pipeline-stage" id="stage-PRODUCTION">
+        <div class="stage-num">STAGE 6</div>
+        <div class="stage-name">PRODUCTION</div>
+      </div>
+      <div class="pipeline-arrow">➔</div>
+      <div class="pipeline-stage" id="stage-RECOVERY">
+        <div class="stage-num">STAGE 7</div>
+        <div class="stage-name">RECOVERY</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Fault Injection Controls -->
+  <div class="fault-panel">
+    <div class="panel-header">
+      <div class="panel-title">🛠️ Controlled Fault Injection Testbed</div>
+      <div style="font-size:0.75rem; color:var(--text-muted);" id="fault-status-msg">Click to simulate incidents</div>
+    </div>
+    <div class="fault-grid">
+      <button class="fault-btn" id="btn-slow" onclick="injectFault('slow_queries')">🐢 Slow DB Queries</button>
+      <button class="fault-btn" id="btn-errors" onclick="injectFault('high_error_rate')">💥 High Error Rate</button>
+      <button class="fault-btn" id="btn-dbdown" onclick="injectFault('db_unavailable')">🔌 DB Unavailable</button>
+      <button class="fault-btn reset" onclick="resetFaults()">✅ Reset All Faults</button>
+    </div>
+  </div>
+
+  <!-- Two Column Main Content -->
+  <div class="two-col">
+    
+    <!-- Left: Incident Overview List -->
+    <div class="card" style="max-height:800px; overflow-y:auto;">
+      <div class="panel-header">
+        <div class="panel-title">📋 Incidents Overview</div>
+      </div>
+      <div id="incidents-list-container">
+        <div style="color:var(--text-muted); text-align:center; padding:2rem 0;">No active incidents</div>
+      </div>
+    </div>
+
+    <!-- Right: Pipeline Details & Multi-Agent View -->
+    <div>
+      
+      <!-- Root Cause & LLM Diagnosis -->
+      <div class="section-card" style="margin-bottom:1rem;">
+        <div class="panel-header">
+          <div class="panel-title">🧠 LLM Root Cause Diagnosis</div>
+          <div style="font-size:0.75rem; color:var(--text-muted);" id="rca-confidence-val">Confidence: —</div>
+        </div>
+        <div style="font-size:0.9rem; font-weight:600;" id="rca-cause">Cause: No incident selected</div>
+        <div style="font-size:0.75rem; color:var(--text-muted); margin-bottom:0.5rem;" id="rca-service">Service: —</div>
+        <div class="meter-bar" style="margin-bottom:0.75rem;"><div class="meter-fill" id="rca-meter" style="width:0%"></div></div>
+        <div style="font-size:0.8rem; color:var(--text-light);" id="rca-reasoning">Select an incident to view diagnosis.</div>
+      </div>
+
+      <!-- Multi-Agent Negotiation Panel -->
+      <div style="margin-bottom:1rem;">
+        <div class="panel-title" style="margin-bottom:0.5rem;">🤖 Multi-Agent Candidate Evaluation</div>
+        <div class="agent-grid">
+          <div class="agent-card">
+            <div class="name">💰 Cost Agent</div>
+            <div class="score" id="agent-cost-score">—</div>
+            <div class="reason" id="agent-cost-reason">Awaiting evaluation</div>
+          </div>
+          <div class="agent-card">
+            <div class="name">🛡️ Reliability Agent</div>
+            <div class="score" id="agent-rel-score">—</div>
+            <div class="reason" id="agent-rel-reason">Awaiting evaluation</div>
+          </div>
+          <div class="agent-card">
+            <div class="name">🔒 Security Agent</div>
+            <div class="score" id="agent-sec-score">—</div>
+            <div class="reason" id="agent-sec-reason">Awaiting evaluation</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- MCDM & Sandbox Details -->
+      <div class="pipeline-detail-grid">
+        <div class="section-card">
+          <h4>📐 MCDM Coordinator Ranking</h4>
+          <div style="font-size:0.75rem; color:var(--text-muted); margin-bottom:0.5rem;">Method: Weighted Sum (Cost:30% Rel:50% Sec:20%)</div>
+          <table>
+            <thead><tr><th>Rank</th><th>Candidate</th><th>Score</th></tr></thead>
+            <tbody id="mcdm-table-body"><tr><td colspan="3" style="color:var(--text-muted)">No ranking yet</td></tr></tbody>
+          </table>
+          <div style="font-size:0.7rem; color:var(--text-muted); margin-top:0.5rem;" id="mcdm-formula">Score = 0.3*Cost + 0.5*Rel + 0.2*Sec</div>
+        </div>
+
+        <div class="section-card">
+          <h4>🧪 Sandbox Multi-Signal Validation</h4>
+          <div style="font-size:0.85rem; font-weight:700; color:var(--accent-primary);" id="sandbox-score">Validation Score: —</div>
+          <div style="font-size:0.75rem; margin:0.4rem 0;" id="sandbox-status-badge"><span class="tag tag-open">Awaiting Sandbox</span></div>
+          <div style="font-size:0.75rem; color:var(--text-muted);" id="sandbox-checks-list">
+            ✓ Health Probe | ✓ Readiness | ✓ Container | ✓ DB | ✓ Error Rate | ✓ Latency
+          </div>
+          <div style="font-size:0.75rem; color:var(--accent-error); margin-top:0.4rem;" id="sandbox-reason"></div>
+        </div>
+      </div>
+
+      <!-- Remediation & Rollback Timeline -->
+      <div class="section-card">
+        <h4>⏱️ Remediation &amp; Rollback Timeline</h4>
+        <ul class="timeline-list" id="timeline-container">
+          <li class="timeline-item"><div class="timeline-time">System Ready</div><div class="timeline-msg">Awaiting incident detection</div></li>
+        </ul>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Service Health Map Topology & Charts -->
+  <div class="two-col">
+    <div class="card">
+      <div class="panel-title" style="margin-bottom:0.5rem;">🗺️ Service Topology Map</div>
+      <div class="topology-container" id="topology-nodes">
+        <div class="topo-node healthy"><div class="node-name">FRONTEND</div><div class="node-type">Port 3000</div></div>
+        <div class="topo-node healthy"><div class="node-name">BACKEND</div><div class="node-type">Port 8000</div></div>
+        <div class="topo-node healthy"><div class="node-name">DATABASE</div><div class="node-type">Port 5433</div></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="panel-title" style="margin-bottom:0.5rem;">📈 Live Metrics (Request Latency)</div>
+      <div style="position:relative; height:160px;">
+        <canvas id="live-latency-chart"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- Phase 8 — Evaluation Dashboard Section -->
+  <div class="card" style="margin-top:1.5rem;">
+    <div class="panel-header">
+      <div class="panel-title">📊 Experimental Evaluation &amp; Research Harness (Phase 8)</div>
+      <button class="btn-mode" onclick="refreshEvaluationDashboard()">🔄 Refresh Evaluation Data</button>
+    </div>
+
+    <!-- Evaluation KPI Cards -->
+    <div class="kpi-grid" style="margin-top:1rem; margin-bottom:1rem;">
+      <div class="card" style="background:var(--bg-dark);">
+        <div class="card-label">Total Trials</div>
+        <div class="card-value" id="eval-kpi-total">0</div>
+        <div class="card-unit">runs executed</div>
+      </div>
+      <div class="card" style="background:var(--bg-dark);">
+        <div class="card-label">Success Rate</div>
+        <div class="card-value" id="eval-kpi-success" style="color:var(--accent-success);">0%</div>
+        <div class="card-unit">successful recoveries</div>
+      </div>
+      <div class="card" style="background:var(--bg-dark);">
+        <div class="card-label">Mean MTTR</div>
+        <div class="card-value" id="eval-kpi-avg-mttr">0.0s</div>
+        <div class="card-unit" id="eval-kpi-med-mttr">Median: 0.0s</div>
+      </div>
+      <div class="card" style="background:var(--bg-dark);">
+        <div class="card-label">Rollback Rate</div>
+        <div class="card-value" id="eval-kpi-rollback" style="color:var(--accent-warning);">0%</div>
+        <div class="card-unit" id="eval-kpi-escalation">Escalation: 0%</div>
+      </div>
+    </div>
+
+    <!-- Strategy Comparison Table -->
+    <div style="margin-bottom:1.5rem;">
+      <h4 style="font-size:0.85rem; text-transform:uppercase; color:var(--text-muted); margin-bottom:0.5rem;">Strategy Performance Comparison</h4>
+      <table>
+        <thead>
+          <tr>
+            <th>Strategy</th><th>Total Runs</th><th>Success Rate</th><th>Avg MTTR</th><th>Median MTTR</th><th>Avg Downtime</th><th>Decision Latency</th><th>Rollback Rate</th>
+          </tr>
+        </thead>
+        <tbody id="eval-comparison-table-body">
+          <tr><td colspan="8" style="color:var(--text-muted); text-align:center;">No evaluation data available. Run 'python -m evaluation run' to populate.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Recent Experiment Runs List -->
+    <div>
+      <h4 style="font-size:0.85rem; text-transform:uppercase; color:var(--text-muted); margin-bottom:0.5rem;">Recent Experiment Runs</h4>
+      <table>
+        <thead>
+          <tr>
+            <th>Run ID</th><th>Scenario</th><th>Strategy</th><th>Repetition</th><th>Status</th><th>MTTR</th><th>Downtime</th><th>Sandbox</th><th>Rollback</th><th>Outcome</th>
+          </tr>
+        </thead>
+        <tbody id="eval-runs-table-body">
+          <tr><td colspan="10" style="color:var(--text-muted); text-align:center;">No experiment runs recorded</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</main>
+
+<!-- Incident Detail Modal -->
+<div class="modal-backdrop" id="incident-modal">
+  <div class="modal-content">
+    <div class="panel-header">
+      <div class="panel-title" id="modal-title">Incident Detail</div>
+      <button onclick="closeModal()" class="btn-mode">Close ✖</button>
+    </div>
+    <div id="modal-body-content">Loading detail...</div>
+  </div>
+</div>
+
+<script>
+  const API = (window.location.port === '3000')
+    ? `${window.location.protocol}//${window.location.hostname}:3000/api`
+    : (window.BACKEND_URL || 'http://localhost:8000');
+
+  let isDemoMode = false;
+  let selectedIncidentId = null;
+  const latencyHistory = [];
+  const MAX_HISTORY = 20;
+
+  // Chart setup
+  const ctx = document.getElementById('live-latency-chart').getContext('2d');
+  const latencyChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: [],
+      datasets: [{
+        label: 'Latency (ms)',
+        data: [],
+        borderColor: '#6366f1',
+        backgroundColor: 'rgba(99,102,241,0.1)',
+        tension: 0.3,
+        fill: true,
+        pointRadius: 2,
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { display: false },
+        y: { beginAtZero: true, grid: { color: '#25293d' }, ticks: { color: '#64748b' } }
+      }
+    }
+  });
+
+  function recordLatency(ms) {
+    const now = new Date().toLocaleTimeString();
+    latencyHistory.push({ t: now, v: ms });
+    if (latencyHistory.length > MAX_HISTORY) latencyHistory.shift();
+    latencyChart.data.labels = latencyHistory.map(p => p.t);
+    latencyChart.data.datasets[0].data = latencyHistory.map(p => p.v);
+    latencyChart.update('none');
+  }
+
+  async function apiFetch(path, opts = {}) {
+    const t0 = performance.now();
+    try {
+      const res = await fetch(`${API}${path}`, {
+        headers: { 'Content-Type': 'application/json' },
+        ...opts,
+      });
+      const ms = Math.round(performance.now() - t0);
+      recordLatency(ms);
+      return { ok: res.ok, data: await res.json() };
+    } catch (err) {
+      const ms = Math.round(performance.now() - t0);
+      recordLatency(ms);
+      return { ok: false, data: null };
+    }
+  }
+
+  function toggleDemoMode() {
+    isDemoMode = !isDemoMode;
+    const btn = document.getElementById('btn-demo-mode');
+    const badge = document.getElementById('demo-indicator');
+    if (isDemoMode) {
+      btn.textContent = 'DEMO MODE: ON';
+      btn.classList.add('active-demo');
+      badge.style.display = 'inline-block';
+      loadDemoData();
+    } else {
+      btn.textContent = 'DEMO MODE: OFF';
+      btn.classList.remove('active-demo');
+      badge.style.display = 'none';
+      refreshAll();
+    }
+  }
+
+  async function refreshDashboardSummary() {
+    if (isDemoMode) return;
+    const { ok, data } = await apiFetch('/dashboard/summary');
+    if (ok && data) {
+      document.getElementById('kpi-active-incidents').textContent = data.active_incidents;
+      document.getElementById('kpi-remediations').textContent = data.total_remediations;
+      document.getElementById('kpi-success-rate').textContent = `${data.remediation_success_rate}% success rate`;
+      document.getElementById('kpi-mttr').textContent = `${data.avg_mttr_seconds}s`;
+
+      const badge = document.getElementById('sys-status-badge');
+      const dot = document.getElementById('header-status-dot');
+      const txt = document.getElementById('sys-status-text');
+      if (data.system_status === 'OPERATIONAL') {
+        badge.className = 'sys-badge';
+        dot.className = 'status-dot';
+        txt.textContent = 'OPERATIONAL';
+      } else {
+        badge.className = 'sys-badge degraded';
+        dot.className = 'status-dot degraded';
+        txt.textContent = 'DEGRADED';
+      }
+    }
+  }
+
+  async function refreshIncidentsList() {
+    if (isDemoMode) return;
+    const { ok, data } = await apiFetch('/incidents');
+    const container = document.getElementById('incidents-list-container');
+    if (!ok || !data || data.length === 0) {
+      container.innerHTML = '<div style="color:var(--text-muted); text-align:center; padding:2rem 0;">No active incidents recorded</div>';
+      return;
+    }
+
+    if (!selectedIncidentId && data.length > 0) {
+      selectedIncidentId = data[0].id;
+    }
+
+    container.innerHTML = data.map(inc => {
+      const isSel = inc.id === selectedIncidentId ? 'selected' : '';
+      const tagCls = inc.status === 'resolved' ? 'tag-resolved' : (inc.status === 'escalated' ? 'tag-escalated' : 'tag-open');
+      return `
+        <div class="incident-item ${isSel}" onclick="selectIncident(${inc.id})">
+          <div class="inc-meta">
+            <span class="inc-id">INC-${inc.id}</span>
+            <span class="tag ${tagCls}">${inc.status}</span>
+          </div>
+          <div class="inc-title">${inc.incident_type || inc.fault_type || 'INCIDENT'}</div>
+          <div class="inc-sub">Service: ${inc.service} | Stage: ${inc.current_stage || 'INCIDENT'}</div>
+        </div>
+      `;
+    }).join('');
+
+    if (selectedIncidentId) {
+      await refreshIncidentPipeline(selectedIncidentId);
+    }
+  }
+
+  async function selectIncident(id) {
+    selectedIncidentId = id;
+    await refreshIncidentsList();
+    openIncidentModal(id);
+  }
+
+  async function refreshIncidentPipeline(id) {
+    if (isDemoMode) return;
+    const { ok, data } = await apiFetch(`/incidents/${id}/pipeline`);
+    if (!ok || !data) return;
+
+    document.getElementById('pipeline-incident-id').textContent = `Incident INC-${id} Pipeline View`;
+
+    // 1. Update pipeline tracker stages
+    const stageMap = {
+      'INCIDENT': 'stage-INCIDENT',
+      'ROOT CAUSE': 'stage-ROOT_CAUSE',
+      'AGENT NEGOTIATION': 'stage-NEGOTIATION',
+      'MCDM': 'stage-MCDM',
+      'SANDBOX': 'stage-SANDBOX',
+      'PRODUCTION': 'stage-PRODUCTION',
+      'RECOVERY': 'stage-RECOVERY',
+    };
+
+    const curStage = data.incident.current_stage || 'INCIDENT';
+    Object.keys(stageMap).forEach(st => {
+      const el = document.getElementById(stageMap[st]);
+      el.className = 'pipeline-stage';
+      if (st === curStage) el.classList.add('active');
+    });
+
+    // 2. Root Cause Panel
+    if (data.root_cause) {
+      const raw = data.root_cause.raw_output || {};
+      const diag = raw.diagnosis || {};
+      const conf = Math.round((diag.confidence || data.root_cause.score || 0.8) * 100);
+
+      document.getElementById('rca-confidence-val').textContent = `Confidence: ${conf}%`;
+      document.getElementById('rca-cause').textContent = `Root Cause: ${diag.cause || raw.cause || 'slow_queries'}`;
+      document.getElementById('rca-service').textContent = `Affected Service: ${data.incident.service}`;
+      document.getElementById('rca-meter').style.width = `${conf}%`;
+      document.getElementById('rca-reasoning').textContent = data.root_cause.reasoning || diag.explanation || 'Root cause identified.';
+    }
+
+    // 3. Multi-Agent Negotiation
+    const evals = data.agent_evaluations || {};
+    if (evals.cost) {
+      document.getElementById('agent-cost-score').textContent = evals.cost.score;
+      document.getElementById('agent-cost-reason').textContent = evals.cost.reasoning || 'Evaluated';
+    }
+    if (evals.reliability) {
+      document.getElementById('agent-rel-score').textContent = evals.reliability.score;
+      document.getElementById('agent-rel-reason').textContent = evals.reliability.reasoning || 'Evaluated';
+    }
+    if (evals.security) {
+      document.getElementById('agent-sec-score').textContent = evals.security.score;
+      document.getElementById('agent-sec-reason').textContent = evals.security.reasoning || 'Evaluated';
+    }
+
+    // 4. MCDM Panel
+    if (data.mcdm_decision) {
+      const raw = data.mcdm_decision.raw_output || {};
+      const ranking = raw.ranking || [];
+      const tbody = document.getElementById('mcdm-table-body');
+      tbody.innerHTML = ranking.map(rc => `
+        <tr class="${rc.rank === 1 ? 'winner' : ''}">
+          <td>#${rc.rank}</td>
+          <td>${rc.action} ${rc.rank === 1 ? '← SELECTED' : ''}</td>
+          <td>${rc.metric ? rc.metric.toFixed(2) : rc.score}</td>
+        </tr>
+      `).join('');
+    }
+
+    // 5. Sandbox Panel
+    const sbActions = data.remediation_actions || [];
+    const sb = sbActions.find(a => a.validation_score != null) || {};
+    if (sb.validation_score != null) {
+      document.getElementById('sandbox-score').textContent = `Validation Score: ${sb.validation_score}`;
+      const badge = document.getElementById('sandbox-status-badge');
+      if (sb.sandbox_passed) {
+        badge.innerHTML = '<span class="tag tag-resolved">PASSED</span>';
+      } else {
+        badge.innerHTML = '<span class="tag tag-escalated">REJECTED</span>';
+      }
+      document.getElementById('sandbox-reason').textContent = sb.failure_reason || '';
+    }
+
+    // 6. Timeline
+    const tlContainer = document.getElementById('timeline-container');
+    if (data.timeline && data.timeline.length > 0) {
+      tlContainer.innerHTML = data.timeline.map(item => `
+        <li class="timeline-item ${item.stage === 'RECOVERY' ? 'success' : ''}">
+          <div class="timeline-time">${new Date(item.time).toLocaleTimeString()}</div>
+          <div class="timeline-msg">${item.event}</div>
+        </li>
+      `).join('');
+    }
+  }
+
+  async function refreshTopology() {
+    if (isDemoMode) return;
+    const { ok, data } = await apiFetch('/dashboard/topology');
+    if (ok && data && data.services) {
+      const container = document.getElementById('topology-nodes');
+      container.innerHTML = data.services.map(s => {
+        const cls = s.status === 'HEALTHY' ? 'healthy' : (s.status === 'DEGRADED' ? 'degraded' : 'down');
+        return `
+          <div class="topo-node ${cls}">
+            <div class="node-name">${s.name}</div>
+            <div class="node-type">${s.type} (Port ${s.port})</div>
+            <div style="font-size:0.7rem; font-weight:700; margin-top:0.2rem;">${s.status}</div>
+          </div>
+        `;
+      }).join('');
+    }
+  }
+
+  async function injectFault(type) {
+    const payload = { slow_queries: false, high_error_rate: false, db_unavailable: false };
+    payload[type] = true;
+    const { ok } = await apiFetch('/admin/fault', { method: 'POST', body: JSON.stringify(payload) });
+    if (ok) {
+      document.getElementById('fault-status-msg').textContent = `Fault injected: ${type}`;
+      setTimeout(() => refreshAll(), 1000);
+    }
+  }
+
+  async function resetFaults() {
+    const { ok } = await apiFetch('/admin/fault/reset', { method: 'POST' });
+    if (ok) {
+      document.getElementById('fault-status-msg').textContent = 'All faults reset.';
+      setTimeout(() => refreshAll(), 1000);
+    }
+  }
+
+  function loadDemoData() {
+    document.getElementById('kpi-active-incidents').textContent = '1';
+    document.getElementById('kpi-remediations').textContent = '14';
+    document.getElementById('kpi-success-rate').textContent = '93.3% success rate';
+    document.getElementById('kpi-mttr').textContent = '18.4s';
+
+    document.getElementById('pipeline-incident-id').textContent = 'Incident INC-1042 (DEMO MODE)';
+
+    // Active stage: SANDBOX
+    ['stage-INCIDENT', 'stage-ROOT_CAUSE', 'stage-NEGOTIATION', 'stage-MCDM'].forEach(id => {
+      document.getElementById(id).className = 'pipeline-stage passed';
+    });
+    document.getElementById('stage-SANDBOX').className = 'pipeline-stage active';
+
+    document.getElementById('rca-confidence-val').textContent = 'Confidence: 87%';
+    document.getElementById('rca-cause').textContent = 'Root Cause: slow_queries';
+    document.getElementById('rca-service').textContent = 'Affected Service: backend';
+    document.getElementById('rca-meter').style.width = '87%';
+    document.getElementById('rca-reasoning').textContent = 'High DB latency detected causing cascading HTTP request delay.';
+
+    document.getElementById('agent-cost-score').textContent = '9.2';
+    document.getElementById('agent-cost-reason').textContent = 'clear_fault is zero-cost';
+    document.getElementById('agent-rel-score').textContent = '8.7';
+    document.getElementById('agent-rel-reason').textContent = 'High service stability';
+    document.getElementById('agent-sec-score').textContent = '9.5';
+    document.getElementById('agent-sec-reason').textContent = 'Zero security risk';
+
+    const tbody = document.getElementById('mcdm-table-body');
+    tbody.innerHTML = `
+      <tr class="winner"><td>#1</td><td>clear_fault ← SELECTED</td><td>9.75</td></tr>
+      <tr><td>#2</td><td>restart_service</td><td>8.63</td></tr>
+      <tr><td>#3</td><td>scale_up</td><td>6.45</td></tr>
+    `;
+
+    document.getElementById('sandbox-score').textContent = 'Validation Score: 0.91';
+    document.getElementById('sandbox-status-badge').innerHTML = '<span class="tag tag-resolved">PASSED</span>';
+
+    const tlContainer = document.getElementById('timeline-container');
+    tlContainer.innerHTML = `
+      <li class="timeline-item"><div class="timeline-time">14:32:10</div><div class="timeline-msg">Incident Detected (SLOW_DATABASE)</div></li>
+      <li class="timeline-item"><div class="timeline-time">14:32:14</div><div class="timeline-msg">Root Cause Diagnosed via Ollama (llama3.2)</div></li>
+      <li class="timeline-item"><div class="timeline-time">14:32:18</div><div class="timeline-msg">Cost / Reliability / Security Agents Evaluated</div></li>
+      <li class="timeline-item"><div class="timeline-time">14:32:19</div><div class="timeline-msg">MCDM Ranked Candidates (Selected: clear_fault)</div></li>
+      <li class="timeline-item success"><div class="timeline-time">14:32:21</div><div class="timeline-msg">Sandbox Validation PASSED (Score 0.91)</div></li>
+    `;
+  }
+
+  async function refreshEvaluationDashboard() {
+    if (isDemoMode) {
+      document.getElementById('eval-kpi-total').textContent = '20';
+      document.getElementById('eval-kpi-success').textContent = '95.0%';
+      document.getElementById('eval-kpi-avg-mttr').textContent = '14.2s';
+      document.getElementById('eval-kpi-med-mttr').textContent = 'Median: 12.8s';
+      document.getElementById('eval-kpi-rollback').textContent = '5.0%';
+      document.getElementById('eval-kpi-escalation').textContent = 'Escalation: 0%';
+
+      document.getElementById('eval-comparison-table-body').innerHTML = `
+        <tr class="winner"><td><strong>safeopsai</strong></td><td>20</td><td>95.0%</td><td>14.20s</td><td>12.80s</td><td>12.10s</td><td>0.145s</td><td>5.0%</td></tr>
+        <tr><td><strong>naive_restart</strong></td><td>20</td><td>40.0%</td><td>48.50s</td><td>45.00s</td><td>45.20s</td><td>0.002s</td><td>0.0%</td></tr>
+        <tr><td><strong>no_sandbox</strong></td><td>20</td><td>75.0%</td><td>22.40s</td><td>20.10s</td><td>20.50s</td><td>0.120s</td><td>20.0%</td></tr>
+        <tr><td><strong>no_multi_agent</strong></td><td>20</td><td>55.0%</td><td>35.10s</td><td>32.00s</td><td>32.40s</td><td>0.010s</td><td>0.0%</td></tr>
+        <tr><td><strong>no_rollback</strong></td><td>20</td><td>80.0%</td><td>19.80s</td><td>18.00s</td><td>18.20s</td><td>0.140s</td><td>0.0%</td></tr>
+      `;
+      return;
+    }
+
+    const [resSum, resComp, resRuns] = await Promise.all([
+      apiFetch('/evaluation/summary'),
+      apiFetch('/evaluation/comparison'),
+      apiFetch('/evaluation/runs?limit=15'),
+    ]);
+
+    if (resSum.ok && resSum.data) {
+      const s = resSum.data;
+      document.getElementById('eval-kpi-total').textContent = s.total_experiments || 0;
+      document.getElementById('eval-kpi-success').textContent = `${s.total_experiments ? Math.round(s.successful_experiments / s.total_experiments * 100) : 0}%`;
+      document.getElementById('eval-kpi-avg-mttr').textContent = `${s.avg_mttr_seconds || 0}s`;
+      document.getElementById('eval-kpi-med-mttr').textContent = `Median: ${s.median_mttr_seconds || 0}s`;
+      document.getElementById('eval-kpi-rollback').textContent = `${s.rollback_rate_pct || 0}%`;
+      document.getElementById('eval-kpi-escalation').textContent = `Escalation: ${s.escalation_rate_pct || 0}%`;
+    }
+
+    if (resComp.ok && resComp.data && resComp.data.strategies) {
+      const tbody = document.getElementById('eval-comparison-table-body');
+      if (resComp.data.strategies.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="8" style="color:var(--text-muted); text-align:center;">No evaluation data available yet. Run evaluation CLI to execute experiments.</td></tr>';
+      } else {
+        tbody.innerHTML = resComp.data.strategies.map(st => {
+          const isSafe = st.strategy === 'safeopsai' ? 'class="winner"' : '';
+          return `
+            <tr ${isSafe}>
+              <td><strong>${st.strategy}</strong></td>
+              <td>${st.total_runs}</td>
+              <td>${st.success_rate_pct}%</td>
+              <td>${st.avg_mttr_seconds}s</td>
+              <td>${st.median_mttr_seconds}s</td>
+              <td>${st.avg_downtime_seconds}s</td>
+              <td>${st.avg_decision_latency_seconds}s</td>
+              <td>${st.rollback_rate_pct}%</td>
+            </tr>
+          `;
+        }).join('');
+      }
+    }
+
+    if (resRuns.ok && resRuns.data && resRuns.data.runs) {
+      const tbody = document.getElementById('eval-runs-table-body');
+      if (resRuns.data.runs.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="10" style="color:var(--text-muted); text-align:center;">No experiment runs recorded</td></tr>';
+      } else {
+        tbody.innerHTML = resRuns.data.runs.map(r => {
+          const tagCls = r.success ? 'tag-resolved' : 'tag-escalated';
+          return `
+            <tr>
+              <td><span style="color:var(--accent-primary); font-weight:700;">${r.experiment_run_id}</span></td>
+              <td>${r.scenario_id}</td>
+              <td>${r.strategy}</td>
+              <td>#${r.repetition}</td>
+              <td><span class="tag ${tagCls}">${r.status}</span></td>
+              <td>${r.mttr_seconds}s</td>
+              <td>${r.downtime_seconds}s</td>
+              <td>${r.sandbox_pass === true ? '✓ PASS' : (r.sandbox_pass === false ? '✖ FAIL' : '—')}</td>
+              <td>${r.rollback ? '⚠️ ROLLED BACK' : 'No'}</td>
+              <td>${r.final_outcome || r.status}</td>
+            </tr>
+          `;
+        }).join('');
+      }
+    }
+  }
+
+  function openIncidentModal(id) {
+    const backdrop = document.getElementById('incident-modal');
+    document.getElementById('modal-title').textContent = `Incident INC-${id} Pipeline Deep Dive`;
+    document.getElementById('modal-body-content').innerHTML = `
+      <div style="font-size:0.85rem; color:var(--text-light); line-height:1.6;">
+        <h4 style="color:var(--accent-primary); margin-bottom:0.5rem;">Incident Summary</h4>
+        <p><strong>ID:</strong> INC-${id}</p>
+        <p><strong>Service:</strong> backend</p>
+        <p><strong>Fault:</strong> slow_queries</p>
+        <p><strong>Status:</strong> Active / Validated</p>
+        <hr style="border-color:var(--card-border); margin:1rem 0;" />
+        <h4 style="color:var(--accent-primary); margin-bottom:0.5rem;">Deterministic MCDM Formula</h4>
+        <p><code>Final Score = 0.30 * Cost + 0.50 * Reliability + 0.20 * Security</code></p>
+      </div>
+    `;
+    backdrop.classList.add('show');
+  }
+
+  function closeModal() {
+    document.getElementById('incident-modal').classList.remove('show');
+  }
+
+  async function refreshAll() {
+    if (isDemoMode) return;
+    await Promise.all([
+      refreshDashboardSummary(),
+      refreshIncidentsList(),
+      refreshTopology(),
+      refreshEvaluationDashboard(),
+    ]);
+  }
+
+  refreshAll();
+  setInterval(refreshAll, 5000);
+</script>
+</body>
+</html>

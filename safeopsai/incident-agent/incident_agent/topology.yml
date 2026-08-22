@@ -1,0 +1,69 @@
+# SafeOpsAI — Service Dependency Topology
+# Used by the Incident Agent to enrich incident records with upstream/downstream
+# context, and will be consumed by the Root Cause Agent (Step 4) to reason about
+# cascade failures.
+#
+# Format: each service lists its direct dependencies.
+# A failure in a dependency may explain anomalies in the dependent service.
+
+services:
+
+  frontend:
+    description: "Nginx static dashboard — user-facing"
+    depends_on:
+      - backend
+    port: 3000
+    health_endpoint: /health
+
+  backend:
+    description: "FastAPI application — business logic and metrics source"
+    depends_on:
+      - database
+    port: 8000
+    health_endpoint: /health
+
+  database:
+    description: "PostgreSQL — persistent storage"
+    depends_on: []
+    port: 5432
+    health_endpoint: null   # checked via pg_isready, not HTTP
+
+  prometheus:
+    description: "Metrics collection — scrapes all services"
+    depends_on: []
+    port: 9090
+    health_endpoint: /-/healthy
+
+  grafana:
+    description: "Dashboards — reads from Prometheus"
+    depends_on:
+      - prometheus
+    port: 3001
+    health_endpoint: /api/health
+
+  incident-agent:
+    description: "Detection agent — polls Prometheus, writes to database"
+    depends_on:
+      - prometheus
+      - database
+    port: 8001
+    health_endpoint: /health
+
+# Cascade failure patterns — used by Root Cause Agent for correlation hints.
+# When a service fails, these patterns describe likely downstream symptoms.
+cascade_patterns:
+
+  database_failure:
+    root: database
+    likely_symptoms:
+      - HIGH_ERROR_RATE    # backend cannot complete DB queries
+      - HIGH_5XX_RATIO     # backend returns 500s on DB-backed routes
+      - HIGH_LATENCY       # backend waits for DB timeout before failing
+    primary_indicator: DATABASE_DOWN
+
+  backend_failure:
+    root: backend
+    likely_symptoms:
+      - HIGH_ERROR_RATE
+      - HIGH_5XX_RATIO
+    primary_indicator: BACKEND_DOWN

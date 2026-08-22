@@ -1,0 +1,50 @@
+# SafeOpsAI — Incident Detection Rules
+# Loaded at startup by config.py.
+# Change any value here without rebuilding the container;
+# restart the incident-agent service to pick up changes.
+
+polling:
+  poll_interval_seconds: 5       # how often to query Prometheus
+  prometheus_timeout_seconds: 5  # per-request HTTP timeout
+
+incident_rules:
+
+  backend_down:
+    enabled: true
+    for_seconds: 15              # must be continuously 0 for this long
+    severity: critical
+    description: "Backend service is unreachable (up{job='safeops-backend'} == 0)"
+
+  database_down:
+    enabled: true
+    for_seconds: 15
+    severity: critical
+    description: "PostgreSQL exporter unreachable (up{job='postgres'} == 0)"
+
+  high_error_rate:
+    enabled: true
+    threshold: 0.5               # errors/s — rate(application_errors_total[1m])
+    for_seconds: 30
+    severity: critical
+    description: "Application error rate exceeded threshold"
+
+  high_5xx_ratio:
+    enabled: true
+    threshold: 0.10              # fraction — 5xx / total requests
+    for_seconds: 30
+    severity: high
+    description: "More than 10% of HTTP requests returning 5xx"
+
+  high_latency:
+    enabled: true
+    p95_threshold_seconds: 2.0   # histogram_quantile(0.95, ...) seconds
+    for_seconds: 30
+    severity: high
+    description: "P95 request latency exceeded 2 seconds"
+
+  slow_database:
+    enabled: true
+    p95_threshold_seconds: 1.0   # histogram_quantile(0.95, db_query_...) seconds
+    for_seconds: 30
+    severity: high
+    description: "P95 database query latency exceeded 1 second"

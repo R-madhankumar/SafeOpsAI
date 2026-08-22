@@ -1,0 +1,16 @@
+.env
+.env.*
+!.env.example
+
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
+.DS_Store
+node_modules/
+
+*.log
+*.tmp
+
+results/raw/

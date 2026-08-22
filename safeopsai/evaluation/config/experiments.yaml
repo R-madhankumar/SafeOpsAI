@@ -1,0 +1,38 @@
+# SafeOpsAI Evaluation Configuration
+
+experiment:
+  name: "SafeOpsAI-Phase8-Evaluation-Campaign"
+  repetitions: 20
+  warmup_runs: 2
+  cooldown_seconds: 0.1
+  randomize_order: true
+  random_seed: 42
+
+metrics:
+  recovery_window_seconds: 120
+  stabilization_delay_seconds: 3
+
+strategies:
+  - safeopsai
+  - naive_restart
+  - no_sandbox
+  - no_multi_agent
+  - no_rollback
+
+scenarios:
+  - SCENARIO-01
+  - SCENARIO-02
+  - SCENARIO-03
+  - SCENARIO-04
+  - SCENARIO-05
+  - SCENARIO-06
+
+environment:
+  mode: "simulation" # Must be "simulation" to pass safety guard
+  backend_url: "http://localhost:8000"
+  prometheus_url: "http://localhost:9090"
+  db_host: "localhost"
+  db_port: 5433
+  db_name: "safeopsdb"
+  db_user: "safeops"
+  db_pass: "safeops123"

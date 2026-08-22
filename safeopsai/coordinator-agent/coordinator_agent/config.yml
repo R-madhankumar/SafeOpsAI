@@ -1,0 +1,19 @@
+# SafeOpsAI — Coordinator Agent Configuration
+# All values here are defaults; environment variables override everything.
+# The RUNTIME weights used for decisions live in the `coordinator_config`
+# DB table — set them without restart via:  POST /weights on :8004
+
+agent:
+  # How often to poll the coordinator_queue (seconds)
+  poll_interval_seconds: 5
+
+  # Maximum number of incidents to coordinate in one polling cycle
+  max_concurrent_incidents: 10
+
+weights:
+  # Default weights (used only to seed the DB table on first run)
+  cost:        0.3
+  reliability: 0.5
+  security:    0.2
+  # Default ranking method: weighted_sum | topsis
+  method:      weighted_sum

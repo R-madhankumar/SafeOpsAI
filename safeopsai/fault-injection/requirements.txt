@@ -1,0 +1,12 @@
+# SafeOpsAI Fault Injection Framework — Dependencies
+# All versions pinned for reproducibility.
+# Install: pip install -r requirements.txt
+
+# HTTP client — used by all fault modules to call /admin/fault and /health
+requests==2.32.3
+
+# Docker SDK — used by backend_down, cpu_stress, db_down, bad_db_config
+docker==7.1.0
+
+# urllib3 is a transitive dep of both requests and docker; pin to avoid conflicts
+urllib3==2.2.2

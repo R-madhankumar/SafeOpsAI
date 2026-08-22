@@ -1,0 +1,82 @@
+global:
+  scrape_interval:     10s   # poll every 10 seconds
+  evaluation_interval: 10s   # evaluate alert rules every 10 seconds
+  scrape_timeout:      5s
+
+rule_files:
+  - "alert_rules.yml"
+
+# Alertmanager (optional — wire up if you want email/Slack alerts)
+# alerting:
+#   alertmanagers:
+#     - static_configs:
+#         - targets: ["alertmanager:9093"]
+
+scrape_configs:
+
+  # --- Prometheus itself ---
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  # --- SafeOpsAI Backend (FastAPI /metrics) ---
+  - job_name: safeops-backend
+    static_configs:
+      - targets: ["backend:8000"]
+    metrics_path: /metrics
+    scrape_interval: 5s   # faster scrape for incident detection
+    scrape_timeout:  4s   # must be < scrape_interval
+
+  # --- PostgreSQL exporter ---
+  - job_name: postgres
+    static_configs:
+      - targets: ["postgres-exporter:9187"]
+
+  # --- Incident Agent self-metrics ---
+  - job_name: incident-agent
+    static_configs:
+      - targets: ["incident-agent:8001"]
+    metrics_path: /metrics
+    scrape_interval: 10s
+
+  # --- Root Cause Agent self-metrics ---
+  - job_name: root-cause-agent
+    static_configs:
+      - targets: ["root-cause-agent:8002"]
+    metrics_path: /metrics
+    scrape_interval: 10s
+
+  # --- Scoring Agent self-metrics ---
+  - job_name: scoring-agent
+    static_configs:
+      - targets: ["scoring-agent:8003"]
+    metrics_path: /metrics
+    scrape_interval: 10s
+
+  # --- Coordinator Agent self-metrics ---
+  - job_name: coordinator-agent
+    static_configs:
+      - targets: ["coordinator-agent:8004"]
+    metrics_path: /metrics
+    scrape_interval: 10s
+
+  # --- Sandbox Validation Agent self-metrics ---
+  - job_name: sandbox-agent
+    static_configs:
+      - targets: ["sandbox-agent:8005"]
+    metrics_path: /metrics
+    scrape_interval: 10s
+
+  # --- Autonomous Remediation & Rollback Agent self-metrics ---
+  - job_name: remediation-agent
+    static_configs:
+      - targets: ["remediation-agent:8006"]
+    metrics_path: /metrics
+    scrape_interval: 10s
+
+  # --- Node exporter (optional, add to compose if you want host metrics) ---
+
+
+  # - job_name: node
+  #   static_configs:
+  #     - targets: ["node-exporter:9100"]

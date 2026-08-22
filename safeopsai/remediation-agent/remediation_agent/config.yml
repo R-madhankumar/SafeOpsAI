@@ -1,0 +1,29 @@
+# Autonomous Remediation & Rollback Agent Configuration
+poll_interval: 5.0
+max_concurrent: 5
+
+# Execution & Stabilization Settings
+stabilization_seconds: 5.0
+degraded_grace_period_seconds: 5.0
+health_timeout_seconds: 5.0
+max_remediation_attempts: 2
+validation_expiration_minutes: 15
+
+# Recovery Score Thresholds
+recovery_success_threshold: 0.85
+degraded_threshold: 0.60
+
+# Configurable Recovery Score Weights (Sum to 1.0)
+weights:
+  availability: 0.30
+  error_rate: 0.25
+  latency: 0.25
+  dependency: 0.20
+
+# Metric Acceptable Thresholds for Normalization
+max_acceptable_latency: 1.5
+max_acceptable_error_rate: 0.05
+
+# Service URLs
+prometheus_url: "http://prometheus:9090"
+backend_url: "http://backend:8000"

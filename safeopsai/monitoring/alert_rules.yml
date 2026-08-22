@@ -1,0 +1,85 @@
+groups:
+  - name: safeops_incidents
+    interval: 10s
+    rules:
+
+      # ── High error rate ──────────────────────────────────────────
+      - alert: HighErrorRate
+        expr: |
+          rate(application_errors_total[1m]) > 0.5
+        for: 30s
+        labels:
+          severity: critical
+          service:  backend
+          fault_type: high_error_rate
+        annotations:
+          summary:     "High error rate on backend"
+          description: "Error rate {{ $value | humanize }}/s over the last minute."
+
+      # ── High HTTP 5xx rate ───────────────────────────────────────
+      - alert: High5xxRate
+        expr: |
+          rate(http_requests_total{status_code=~"5.."}[1m])
+          / rate(http_requests_total[1m]) > 0.1
+        for: 30s
+        labels:
+          severity: critical
+          service:  backend
+          fault_type: high_error_rate
+        annotations:
+          summary:     "More than 10% of requests returning 5xx"
+          description: "5xx ratio is {{ $value | humanizePercentage }}."
+
+      # ── Slow request latency ─────────────────────────────────────
+      - alert: HighRequestLatency
+        expr: |
+          histogram_quantile(0.95,
+            rate(http_request_duration_seconds_bucket[2m])
+          ) > 2.0
+        for: 30s
+        labels:
+          severity: warning
+          service:  backend
+          fault_type: slow_queries
+        annotations:
+          summary:     "P95 request latency above 2 seconds"
+          description: "P95 latency is {{ $value | humanizeDuration }}."
+
+      # ── Slow DB queries ──────────────────────────────────────────
+      - alert: SlowDatabaseQueries
+        expr: |
+          histogram_quantile(0.95,
+            rate(db_query_duration_seconds_bucket[2m])
+          ) > 1.0
+        for: 30s
+        labels:
+          severity: warning
+          service:  database
+          fault_type: slow_queries
+        annotations:
+          summary:     "P95 DB query latency above 1 second"
+          description: "P95 DB latency is {{ $value | humanizeDuration }}."
+
+      # ── Backend down ─────────────────────────────────────────────
+      - alert: BackendDown
+        expr: up{job="safeops-backend"} == 0
+        for: 15s
+        labels:
+          severity: critical
+          service:  backend
+          fault_type: container_down
+        annotations:
+          summary:     "Backend service is unreachable"
+          description: "Prometheus cannot scrape the backend /metrics endpoint."
+
+      # ── Database down ────────────────────────────────────────────
+      - alert: DatabaseDown
+        expr: up{job="postgres"} == 0
+        for: 15s
+        labels:
+          severity: critical
+          service:  database
+          fault_type: container_down
+        annotations:
+          summary:     "PostgreSQL exporter is unreachable"
+          description: "Prometheus cannot scrape the postgres-exporter endpoint."

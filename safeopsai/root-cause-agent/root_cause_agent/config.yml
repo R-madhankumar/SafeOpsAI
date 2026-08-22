@@ -1,0 +1,51 @@
+# SafeOpsAI — Root Cause Agent Configuration
+# All values here are defaults; environment variables override everything.
+# Edit this file and restart the container — no rebuild needed.
+
+agent:
+  # How often to poll the rca_queue for new incidents (seconds)
+  poll_interval_seconds: 10
+
+  # Maximum number of incidents to diagnose concurrently
+  max_concurrent_diagnoses: 3
+
+  # How long to wait after incident detection before attempting RCA
+  # (gives Prometheus time to accumulate a meaningful metric window)
+  diagnosis_delay_seconds: 5
+
+llm:
+  # Ollama base URL — overridden by OLLAMA_URL env var in Docker
+  base_url: "http://localhost:11434"
+
+  # Model to use — must be pulled in Ollama before the agent starts
+  # Supported: llama3, llama3.2, mistral, gemma2
+  model: "llama3.2"
+
+  # Maximum tokens in the LLM response
+  max_tokens: 1024
+
+  # LLM temperature — lower = more deterministic JSON output
+  temperature: 0.1
+
+  # HTTP timeout for the LLM call (seconds) — Ollama can be slow on CPU
+  timeout_seconds: 120
+
+  # If the LLM call fails or returns invalid JSON, fall back to
+  # rule-based diagnosis rather than crashing
+  fallback_on_error: true
+
+prometheus:
+  base_url: "http://localhost:9090"
+  timeout_seconds: 5
+
+  # How many seconds of metric history to collect for context
+  # (sent to the LLM as a time-series summary)
+  history_window_minutes: 5
+
+evidence:
+  # Maximum number of log lines to include (placeholder — backend log
+  # ingestion is added in a later step; set to 0 to disable)
+  max_log_lines: 0
+
+  # Include cascade pattern hints in the prompt (uses topology.yml)
+  include_topology: true

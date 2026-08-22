@@ -1,0 +1,15 @@
+# Sandbox Validator Configuration
+poll_interval: 5.0
+max_concurrent: 5
+
+# Validation thresholds and timeouts (externalized)
+health_check_timeout: 5.0
+stabilization_period: 2.0
+min_validation_score: 0.70
+max_acceptable_latency: 1.5
+max_acceptable_error_rate: 0.05
+db_connection_timeout: 5.0
+
+# Service URLs
+prometheus_url: "http://prometheus:9090"
+backend_url: "http://backend:8000"
