@@ -7,6 +7,7 @@ for sandbox validation outcomes in remediation_actions and agent_decisions.
 
 from __future__ import annotations
 
+from datetime import datetime
 import json
 import logging
 from pathlib import Path
@@ -21,6 +22,17 @@ log = logging.getLogger("sandbox_agent.db")
 
 _MIGRATION_FILE = Path(__file__).parent.parent / "database" / "migrate_step7.sql"
 _pool: asyncpg.Pool | None = None
+
+
+def _parse_ts(val: Any) -> Optional[datetime]:
+    if not val:
+        return None
+    if isinstance(val, datetime):
+        return val
+    try:
+        return datetime.fromisoformat(str(val))
+    except Exception:
+        return None
 
 
 async def init_pool(retries: int = 10, delay: float = 3.0) -> None:
@@ -195,8 +207,8 @@ async def write_remediation_action(res: ValidationAttemptResult) -> int:
             res.candidate_rank,
             res.validation_score,
             res.status == "PASS",
-            res.sandbox_started_at or None,
-            res.sandbox_ended_at or None,
+            _parse_ts(res.sandbox_started_at),
+            _parse_ts(res.sandbox_ended_at),
             json.dumps(res.checks.model_dump()),
             json.dumps(res.baseline.model_dump()),
             json.dumps(res.after.model_dump()),

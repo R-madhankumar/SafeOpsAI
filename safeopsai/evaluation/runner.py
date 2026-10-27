@@ -222,6 +222,8 @@ class ExperimentController:
         selected_scenarios: Optional[List[str]] = None,
         selected_strategies: Optional[List[str]] = None,
         repetitions: Optional[int] = None,
+        output_csv_path: Optional[Any] = None,
+        export_csv: bool = True,
     ) -> List[ExperimentRunRecord]:
         """Runs complete evaluation campaign across scenarios and strategies."""
         check_safety_guard(self.config.env_mode)
@@ -271,7 +273,8 @@ class ExperimentController:
                 random_seed=self.config.random_seed,
             )
 
-        export_runs_to_csv(self.records)
+        if export_csv:
+            export_runs_to_csv(self.records, output_path=output_csv_path)
         await self.db.close()
         log.info("Campaign %s completed successfully.", exp_id)
         return self.records

@@ -454,7 +454,7 @@ class RemediationController:
             return True, "Precheck context bypass"
 
         inc = context.get("incident")
-        if not inc or inc.get("status") != "open":
+        if not inc or inc.get("status") not in ("open", "remediating"):
             return False, f"Incident {incident_id} is not active (status={inc.get('status') if inc else 'missing'})"
 
         rca = context.get("root_cause_decision")

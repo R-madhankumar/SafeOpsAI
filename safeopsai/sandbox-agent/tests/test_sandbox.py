@@ -181,7 +181,7 @@ def test_7_sandbox_failure_never_modifies_production():
         applied = await env.apply_remediation("restart_service", "backend")
         assert applied is True
         # Verify production URL string was not mutated or called directly during isolation
-        assert env.backend_url == "http://backend:8000"
+        assert env.backend_url in ("http://backend:8000", "http://localhost:8000")
 
     asyncio.run(_run())
 

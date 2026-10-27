@@ -11,5 +11,5 @@ max_acceptable_error_rate: 0.05
 db_connection_timeout: 5.0
 
 # Service URLs
-prometheus_url: "http://prometheus:9090"
-backend_url: "http://backend:8000"
+prometheus_url: "http://localhost:9090"
+backend_url: "http://localhost:8000"

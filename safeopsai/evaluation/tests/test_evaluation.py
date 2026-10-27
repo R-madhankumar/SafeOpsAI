@@ -165,6 +165,7 @@ def test_11_randomized_ordering():
         recs = await controller.run_campaign(
             selected_scenarios=["SCENARIO-01", "SCENARIO-02"],
             selected_strategies=["safeopsai", "naive_restart"],
+            export_csv=False,
         )
         assert len(recs) == 8
     asyncio.run(_run())
@@ -197,7 +198,7 @@ def test_13_statistical_calculations():
     assert comp.treatment_mean < comp.baseline_mean
 
 
-def test_14_environment_safety_guard():
+def test_14_environment_safety_guard(monkeypatch):
     # Should pass when simulation
     check_safety_guard("simulation")
 
@@ -205,5 +206,9 @@ def test_14_environment_safety_guard():
     with pytest.raises(SafetyViolationError):
         check_safety_guard("production")
 
+    # Clear shell env vars so the empty-string override is not masked by
+    # a pre-existing ENVIRONMENT=simulation set outside the test suite.
+    monkeypatch.delenv("ENVIRONMENT", raising=False)
+    monkeypatch.delenv("SAFEOPS_ENV", raising=False)
     with pytest.raises(SafetyViolationError):
         check_safety_guard("")

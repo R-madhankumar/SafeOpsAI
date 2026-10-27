@@ -9,7 +9,7 @@ from pathlib import Path
 from dataclasses import dataclass, field
 import yaml
 
-DB_HOST = os.getenv("DB_HOST", "database")
+DB_HOST = os.getenv("DB_HOST", "localhost")
 DB_PORT = int(os.getenv("DB_PORT", "5432"))
 DB_NAME = os.getenv("DB_NAME", "safeopsdb")
 DB_USER = os.getenv("DB_USER", "safeops")
@@ -17,8 +17,8 @@ DB_PASS = os.getenv("DB_PASS", "safeops123")
 
 API_PORT = int(os.getenv("API_PORT", "8005"))
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
-PROMETHEUS_URL = os.getenv("PROMETHEUS_URL", "http://prometheus:9090")
-BACKEND_URL = os.getenv("BACKEND_URL", "http://backend:8000")
+PROMETHEUS_URL = os.getenv("PROMETHEUS_URL", "http://localhost:9090")
+BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8000")
 
 
 @dataclass

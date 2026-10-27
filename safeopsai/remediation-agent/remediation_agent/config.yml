@@ -25,5 +25,5 @@ max_acceptable_latency: 1.5
 max_acceptable_error_rate: 0.05
 
 # Service URLs
-prometheus_url: "http://prometheus:9090"
-backend_url: "http://backend:8000"
+prometheus_url: "http://localhost:9090"
+backend_url: "http://localhost:8000"

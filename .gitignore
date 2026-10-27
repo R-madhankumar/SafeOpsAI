@@ -1,0 +1,27 @@
+# Environments & secrets
+.env
+.env.*
+!.env.example
+safeopsai/.env
+safeopsai/.env.*
+
+# Python & caches
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Logs & temp files
+*.log
+logs/
+*.tmp
+*.temp
+
+# IDE & OS
+.run/
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
